@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry run paper-bartender:*)",
+      "Bash(poetry run pytest:*)"
+    ]
+  }
+}
