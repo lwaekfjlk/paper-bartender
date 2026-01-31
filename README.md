@@ -1,10 +1,12 @@
 # Paper Bartender
 
-A CLI tool to help researchers manage paper deadlines by decomposing milestones into daily tasks using AI.
+![Paper Bartender](assets/paper-bartender-intro.png)
 
 [![PyPI version](https://badge.fury.io/py/paper-bartender.svg)](https://pypi.org/project/paper-bartender/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+A CLI tool to help researchers manage multiple paper submission deadlines by tracking milestones into daily tasks using AI.
 
 ## Features
 

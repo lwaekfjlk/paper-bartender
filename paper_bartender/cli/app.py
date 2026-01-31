@@ -626,6 +626,112 @@ def do_command(
             print_error(str(e))
             raise typer.Exit(1)
 
+    elif command == 'add_paper_with_milestones':
+        # Create a new paper AND its milestones in one command
+        name = params.get('name')
+        deadline = params.get('deadline')
+        pdf_path = params.get('pdf_path')
+        milestones_list = params.get('milestones', [])
+
+        if not name or not deadline:
+            print_error('Could not extract paper name and deadline from input')
+            raise typer.Exit(1)
+
+        # Validate and resolve PDF path if provided
+        resolved_pdf: Optional[str] = None
+        if pdf_path:
+            path = Path(pdf_path).expanduser().resolve()
+            if path.exists() and path.suffix.lower() == '.pdf':
+                resolved_pdf = str(path)
+            else:
+                print_warning(f'PDF not found or invalid: {pdf_path}')
+
+        paper_service = PaperService()
+
+        # Check if paper already exists
+        existing_paper = paper_service.get_by_name(name)
+        if existing_paper:
+            print_warning(f'Paper "{name}" already exists. Adding milestones to existing paper.')
+            target_paper = existing_paper
+        else:
+            # Create the paper
+            try:
+                deadline_date = parse_date(deadline)
+                target_paper = paper_service.create(
+                    name=name,
+                    deadline=deadline_date,
+                    pdf_path=resolved_pdf,
+                )
+                print_success(f'Created paper "{target_paper.name}"')
+                typer.echo(f'  Deadline: {format_date(deadline_date)}')
+                if resolved_pdf:
+                    typer.echo(f'  PDF: {resolved_pdf}')
+            except ValueError as e:
+                print_error(str(e))
+                raise typer.Exit(1)
+
+        # Now create all milestones
+        if milestones_list:
+            milestone_service = MilestoneService()
+            created_milestones = []
+            total_tasks = 0
+
+            # Parse all milestones and sort by due_date
+            parsed_milestones = []
+            for ms in milestones_list:
+                description = ms.get('description')
+                due_date_str = ms.get('due_date')
+
+                if not description or not due_date_str:
+                    print_warning(f'Skipping incomplete milestone: {ms}')
+                    continue
+
+                try:
+                    due = parse_date(due_date_str)
+                    parsed_milestones.append({'description': description, 'due_date': due})
+                except ValueError as e:
+                    print_error(f'Failed to parse date for "{description}": {e}')
+
+            # Sort milestones by due_date to ensure sequential ordering
+            parsed_milestones.sort(key=lambda x: x['due_date'])
+
+            # Create milestones with proper start_date (sequential)
+            prev_due_date = date.today()
+            for ms in parsed_milestones:
+                description = ms['description']
+                due = ms['due_date']
+
+                try:
+                    milestone = milestone_service.create(
+                        paper_id=target_paper.id,
+                        description=description,
+                        start_date=prev_due_date,
+                        due_date=due,
+                    )
+                    created_milestones.append(milestone)
+                    print_success(f'Created milestone: {milestone.description}')
+                    typer.echo(f'  Period: {format_date(prev_due_date)} → {format_date(due)}')
+
+                    # Update prev_due_date for next milestone
+                    prev_due_date = due
+
+                    # Auto-decompose milestone into tasks
+                    try:
+                        decomposition_service = DecompositionService()
+                        with console.status(f'Generating tasks for "{description}"...'):
+                            tasks = decomposition_service.decompose_milestone(milestone.id)
+                        print_success(f'Generated {len(tasks)} daily tasks')
+                        total_tasks += len(tasks)
+                    except ValueError as e:
+                        print_warning(f'Could not auto-generate tasks: {e}')
+
+                except ValueError as e:
+                    print_error(f'Failed to create milestone "{description}": {e}')
+
+            if created_milestones:
+                console.print()
+                print_success(f'Created {len(created_milestones)} milestone(s) with {total_tasks} total tasks')
+
     elif command == 'add_milestone':
         paper_name = params.get('paper_name')
         description = params.get('description')
@@ -826,6 +932,7 @@ def do_command(
         name = params.get('name')
         pdf_path = params.get('pdf_path')
         new_deadline = params.get('deadline')
+        new_name = params.get('new_name')
 
         if not name:
             print_error('Could not extract paper name from input')
@@ -840,6 +947,18 @@ def do_command(
             raise typer.Exit(1)
 
         updated = False
+        old_name = target_paper.name
+
+        # Update name if provided
+        if new_name:
+            # Check if new name already exists
+            existing = paper_svc.get_by_name(new_name)
+            if existing and existing.id != target_paper.id:
+                print_error(f'Paper "{new_name}" already exists')
+                raise typer.Exit(1)
+            target_paper.name = new_name
+            updated = True
+            print_success(f'Renamed paper "{old_name}" → "{new_name}"')
 
         # Update PDF path if provided
         if pdf_path:
