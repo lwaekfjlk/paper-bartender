@@ -75,6 +75,12 @@ def timeline(
     """Show the complete timeline for a specific paper."""
     show_upcoming(paper_name=paper_name)
 
+@app.command('timeline')
+def timeline(
+    paper_name: str = typer.Argument(..., help='Name of the paper'),
+) -> None:
+    """Show the complete timeline for a specific paper."""
+    show_upcoming(paper_name=paper_name)
 
 def show_today(paper_name: Optional[str] = None) -> None:
     """Display today's tasks."""
