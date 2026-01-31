@@ -30,7 +30,7 @@ paper-bartender = "paper_bartender.cli.app:app"
 
 [tool.poetry.dependencies]
 python = ">=3.9, <3.13"
-pydantic = "^2.8.2"
+pydantic = "^2.12.5"
 typer = {extras = ["all"], version = "^0.12.0"}
 pydantic-settings = "^2.4.0"
 anthropic = "^0.40.0"
