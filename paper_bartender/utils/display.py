@@ -54,6 +54,8 @@ def create_tasks_table(title: str = 'Tasks') -> Table:
     """Create a table for displaying tasks."""
     table = Table(title=title, show_header=True, header_style='bold')
     table.add_column('Paper', style='bold', width=16, no_wrap=True)
+    table.add_column('Final Deadline', no_wrap=True)
+    table.add_column('Milestone Due', no_wrap=True)
     table.add_column('Checkpoint')
     table.add_column('Detailed Task')
     return table
@@ -99,6 +101,8 @@ def create_day_table(date_str: str, task_count: int) -> Table:
         header_style='bold',
     )
     table.add_column('Paper', style='bold', width=16, no_wrap=True)
+    table.add_column('Final Deadline', no_wrap=True)
+    table.add_column('Milestone Due', no_wrap=True)
     table.add_column('Checkpoint')
     table.add_column('Detailed Task')
     return table

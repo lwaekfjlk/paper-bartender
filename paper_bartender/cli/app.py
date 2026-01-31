@@ -86,9 +86,11 @@ def show_today(paper_name: Optional[str] = None) -> None:
     """Display today's tasks."""
     import re
     from paper_bartender.utils.display import get_paper_color
+    from paper_bartender.services.milestone_service import MilestoneService
 
     task_service = TaskService()
     paper_service = PaperService()
+    milestone_service = MilestoneService()
 
     # Get paper filter if specified
     paper_id = None
@@ -108,6 +110,9 @@ def show_today(paper_name: Optional[str] = None) -> None:
     # Get paper names for display
     paper_names = task_service.get_paper_name_map()
 
+    # Build milestone due date cache
+    milestone_due_dates: Dict[str, date] = {}
+
     # Show today's tasks in detail
     tasks = task_service.get_today(paper_id)
     title = f"📋 Today's Tasks ({date.today().strftime('%a, %b %d')})"
@@ -116,13 +121,121 @@ def show_today(paper_name: Optional[str] = None) -> None:
         print_info("No tasks scheduled for today. Use 'paper-bartender all' to see upcoming progress.")
         return
 
+    # Show paper deadlines summary
+    paper_ids_in_tasks = set(t.paper_id for t in tasks)
+    if overdue:
+        paper_ids_in_tasks.update(t.paper_id for t in overdue)
+
+    papers_with_deadlines = []
+    for pid in paper_ids_in_tasks:
+        paper = paper_service.get_by_id(pid)
+        if paper:
+            days_left = (paper.deadline - date.today()).days
+            papers_with_deadlines.append((paper.name, paper.deadline, days_left))
+
+    # Sort by deadline
+    papers_with_deadlines.sort(key=lambda x: x[1])
+
+    if papers_with_deadlines:
+        console.print('[bold]📌 Paper Deadlines:[/bold]')
+        for p_name, deadline, days_left in papers_with_deadlines:
+            if days_left < 0:
+                days_str = f'[red]{abs(days_left)} days overdue[/red]'
+            elif days_left == 0:
+                days_str = '[red]TODAY[/red]'
+            elif days_left <= 7:
+                days_str = f'[yellow]{days_left} days left[/yellow]'
+            else:
+                days_str = f'[green]{days_left} days left[/green]'
+            console.print(f'  • {p_name}: {deadline.strftime("%a, %b %d, %Y")} ({days_str})')
+        console.print()
+
     # Track paper colors
     paper_colors: Dict[str, str] = {}
+
+    # Cache paper deadlines
+    paper_deadlines: Dict[str, tuple] = {}  # paper_id -> (deadline, days_left, progress_pct)
+
+    def get_paper_deadline_info(paper_id) -> tuple:
+        """Get paper deadline info with progress bar."""
+        pid_str = str(paper_id)
+        if pid_str not in paper_deadlines:
+            paper = paper_service.get_by_id(paper_id)
+            if paper:
+                days_left = (paper.deadline - date.today()).days
+                # Calculate progress: assume paper started 30 days before deadline or from today if less
+                total_days = 30  # Assume 30 day project
+                days_passed = total_days - days_left if days_left < total_days else 0
+                progress_pct = min(100, max(0, int(days_passed * 100 / total_days))) if total_days > 0 else 0
+                paper_deadlines[pid_str] = (paper.deadline, days_left, progress_pct)
+            else:
+                paper_deadlines[pid_str] = (None, 0, 0)
+        return paper_deadlines[pid_str]
+
+    def format_deadline_cell(paper_id) -> str:
+        """Format the final deadline cell with progress bar."""
+        deadline, days_left, _ = get_paper_deadline_info(paper_id)
+        if deadline is None:
+            return '[dim]N/A[/dim]'
+
+        # Create time-based progress bar (how much time has passed)
+        bar_width = 8
+        # Color based on urgency
+        if days_left < 0:
+            bar = f'[red]{"█" * bar_width}[/red]'
+            days_str = f'[red]{abs(days_left)}d overdue[/red]'
+        elif days_left == 0:
+            bar = f'[red]{"█" * bar_width}[/red]'
+            days_str = '[red]TODAY![/red]'
+        elif days_left <= 3:
+            bar = f'[red]{"█" * bar_width}[/red]'
+            days_str = f'[red]{days_left}d left[/red]'
+        elif days_left <= 7:
+            bar = f'[yellow]{"█" * bar_width}[/yellow]'
+            days_str = f'[yellow]{days_left}d left[/yellow]'
+        else:
+            bar = f'[green]{"█" * bar_width}[/green]'
+            days_str = f'[green]{days_left}d left[/green]'
+
+        return f'{deadline.strftime("%m/%d")} {days_str}'
+
+    def get_milestone_due(task: Task) -> str:
+        """Get the milestone due date for a task."""
+        if task.milestone_id:
+            milestone_id_str = str(task.milestone_id)
+            if milestone_id_str not in milestone_due_dates:
+                milestone = milestone_service.get_by_id(task.milestone_id)
+                if milestone:
+                    milestone_due_dates[milestone_id_str] = milestone.due_date
+            if milestone_id_str in milestone_due_dates:
+                due = milestone_due_dates[milestone_id_str]
+                days_left = (due - date.today()).days
+
+                # Color based on urgency
+                if days_left < 0:
+                    days_str = f'[red]{abs(days_left)}d overdue[/red]'
+                elif days_left == 0:
+                    days_str = '[red]TODAY![/red]'
+                elif days_left <= 3:
+                    days_str = f'[red]{days_left}d left[/red]'
+                elif days_left <= 7:
+                    days_str = f'[yellow]{days_left}d left[/yellow]'
+                else:
+                    days_str = f'[green]{days_left}d left[/green]'
+
+                return f'{due.strftime("%m/%d")} {days_str}'
+        return '[dim]N/A[/dim]'
 
     def format_task_row(task: Task, is_overdue: bool = False) -> tuple:
         """Format a task into table row with checkpoint and detailed task."""
         p_name = paper_names.get(task.paper_id, 'Unknown')
         color = get_paper_color(p_name, paper_colors)
+
+        # Get paper final deadline
+        final_deadline = format_deadline_cell(task.paper_id)
+
+        # Get milestone due date
+        milestone_due = get_milestone_due(task)
 
         # Extract percentage and milestone from task description
         match = re.match(r'\[(\d+)% of \'([^\']+)\'\](.*)', task.description)
@@ -150,6 +263,8 @@ def show_today(paper_name: Optional[str] = None) -> None:
 
         return (
             f'[{color}]{p_name}[/{color}]',
+            final_deadline,
+            milestone_due,
             checkpoint,
             detailed_task,
         )
@@ -174,9 +289,11 @@ def show_upcoming(paper_name: Optional[str] = None) -> None:
     """Display all upcoming progress by day."""
     import re
     from paper_bartender.utils.display import create_day_table, get_paper_color
+    from paper_bartender.services.milestone_service import MilestoneService
 
     task_service = TaskService()
     paper_service = PaperService()
+    milestone_service = MilestoneService()
 
     # Get paper filter if specified
     paper_id = None
@@ -212,6 +329,71 @@ def show_upcoming(paper_name: Optional[str] = None) -> None:
     # Track paper colors for consistency
     paper_colors: Dict[str, str] = {}
 
+    # Build milestone due date cache
+    milestone_due_dates: Dict[str, date] = {}
+
+    # Cache paper deadlines
+    paper_deadlines: Dict[str, tuple] = {}
+
+    def get_paper_deadline_info(paper_id) -> tuple:
+        """Get paper deadline info."""
+        pid_str = str(paper_id)
+        if pid_str not in paper_deadlines:
+            paper = paper_service.get_by_id(paper_id)
+            if paper:
+                days_left = (paper.deadline - date.today()).days
+                paper_deadlines[pid_str] = (paper.deadline, days_left)
+            else:
+                paper_deadlines[pid_str] = (None, 0)
+        return paper_deadlines[pid_str]
+
+    def format_deadline_cell(paper_id) -> str:
+        """Format the final deadline cell."""
+        deadline, days_left = get_paper_deadline_info(paper_id)
+        if deadline is None:
+            return '[dim]N/A[/dim]'
+
+        # Color based on urgency
+        if days_left < 0:
+            days_str = f'[red]{abs(days_left)}d overdue[/red]'
+        elif days_left == 0:
+            days_str = '[red]TODAY![/red]'
+        elif days_left <= 3:
+            days_str = f'[red]{days_left}d left[/red]'
+        elif days_left <= 7:
+            days_str = f'[yellow]{days_left}d left[/yellow]'
+        else:
+            days_str = f'[green]{days_left}d left[/green]'
+
+        return f'{deadline.strftime("%m/%d")} {days_str}'
+
+    def get_milestone_due(task: Task) -> str:
+        """Get the milestone due date for a task."""
+        if task.milestone_id:
+            milestone_id_str = str(task.milestone_id)
+            if milestone_id_str not in milestone_due_dates:
+                milestone = milestone_service.get_by_id(task.milestone_id)
+                if milestone:
+                    milestone_due_dates[milestone_id_str] = milestone.due_date
+            if milestone_id_str in milestone_due_dates:
+                due = milestone_due_dates[milestone_id_str]
+                days_left = (due - date.today()).days
+
+                # Color based on urgency
+                if days_left < 0:
+                    days_str = f'[red]{abs(days_left)}d overdue[/red]'
+                elif days_left == 0:
+                    days_str = '[red]TODAY![/red]'
+                elif days_left <= 3:
+                    days_str = f'[red]{days_left}d left[/red]'
+                elif days_left <= 7:
+                    days_str = f'[yellow]{days_left}d left[/yellow]'
+                else:
+                    days_str = f'[green]{days_left}d left[/green]'
+
+                return f'{due.strftime("%m/%d")} {days_str}'
+        return '[dim]N/A[/dim]'
+
     # Calculate total stats
     total_tasks = len(tasks)
     total_days = len(tasks_by_date)
@@ -229,6 +411,12 @@ def show_upcoming(paper_name: Optional[str] = None) -> None:
         for task in day_tasks:
             p_name = paper_names.get(task.paper_id, 'Unknown')
             color = get_paper_color(p_name, paper_colors)
+
+            # Get paper final deadline
+            final_deadline = format_deadline_cell(task.paper_id)
+
+            # Get milestone due date
+            milestone_due = get_milestone_due(task)
 
             # Extract percentage and milestone from task description
             match = re.match(r'\[(\d+)% of \'([^\']+)\'\](.*)', task.description)
@@ -250,12 +438,16 @@ def show_upcoming(paper_name: Optional[str] = None) -> None:
 
                 table.add_row(
                     f'[{color}]{p_name}[/{color}]',
+                    final_deadline,
+                    milestone_due,
                     checkpoint,
                     detail,
                 )
             else:
                 table.add_row(
                     f'[{color}]{p_name}[/{color}]',
+                    final_deadline,
+                    milestone_due,
                     '',
                     task.description[:50] + '...' if len(task.description) > 50 else task.description,
                 )
