@@ -22,6 +22,7 @@ class Milestone(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     paper_id: UUID
     description: str
+    start_date: Optional[date] = None  # When this milestone begins (default: today or previous milestone's due_date)
     due_date: date
     status: MilestoneStatus = MilestoneStatus.PENDING
     priority: int = 1

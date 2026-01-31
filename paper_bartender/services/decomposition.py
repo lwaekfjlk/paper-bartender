@@ -39,47 +39,145 @@ class DecompositionService:
             current += timedelta(days=1)
         return days
 
+    def _create_simple_tasks(
+        self,
+        milestone: Milestone,
+        paper: Paper,
+        available_days: List[date],
+    ) -> List[Task]:
+        """Create simple percentage-based tasks without PDF context.
+
+        This is used when no PDF is linked to the paper.
+        Creates 2-4 evenly distributed checkpoint tasks.
+        """
+        num_days = len(available_days)
+
+        # Create one checkpoint per day for consistent daily progress tracking
+        num_checkpoints = num_days
+
+        tasks = []
+        for i in range(num_checkpoints):
+            # Calculate percentage (evenly distributed to reach 100%)
+            percentage = int((i + 1) * 100 / num_checkpoints)
+
+            # Calculate which day to schedule this task (spread from first to last day)
+            if num_checkpoints == 1:
+                day_index = 0  # Only one checkpoint, schedule on first day
+            else:
+                day_index = int(i * (num_days - 1) / (num_checkpoints - 1))
+            scheduled_date = available_days[min(day_index, num_days - 1)]
+
+            # Create task description
+            description = f"[{percentage}% of '{milestone.description}']"
+
+            task = Task(
+                milestone_id=milestone.id,
+                paper_id=paper.id,
+                description=description,
+                scheduled_date=scheduled_date,
+                estimated_hours=self._settings.default_task_hours,
+            )
+            tasks.append(task)
+
+        return tasks
+
+    def _get_pdf_context(self, paper: Paper) -> Optional[str]:
+        """Get context from the paper's PDF if available."""
+        if not paper.pdf_path:
+            return None
+
+        try:
+            from paper_bartender.utils.pdf import analyze_paper_sections, get_pdf_summary
+
+            sections = analyze_paper_sections(paper.pdf_path)
+            summary = get_pdf_summary(paper.pdf_path, max_chars=6000)
+
+            # Build context about current paper status
+            completed_sections = [s.replace('_', ' ') for s, v in sections.items() if v]
+            missing_sections = [s.replace('_', ' ') for s, v in sections.items() if not v]
+
+            context = f"""
+CURRENT PAPER CONTENT (from PDF):
+Completed sections: {', '.join(completed_sections) if completed_sections else 'None detected'}
+Missing/incomplete sections: {', '.join(missing_sections) if missing_sections else 'None detected'}
+
+Paper excerpt:
+{summary}
+"""
+            return context
+        except Exception:
+            return None
+
     def _build_prompt(
         self,
         paper: Paper,
         milestone: Milestone,
         available_days: List[date],
+        pdf_context: Optional[str] = None,
     ) -> str:
         """Build the prompt for the LLM."""
         days_str = ', '.join(d.strftime('%Y-%m-%d') for d in available_days[:14])
         if len(available_days) > 14:
             days_str += f' ... ({len(available_days)} days total)'
 
-        return f"""You are helping a researcher decompose a milestone into daily tasks.
+        # Base prompt
+        prompt = f"""You are helping a researcher plan tasks for their paper milestone.
 
-Paper: {paper.name}
-Paper Deadline: {paper.deadline.strftime('%Y-%m-%d')}
-Conference: {paper.conference or 'Not specified'}
+PAPER: {paper.name}
+DEADLINE: {paper.deadline.strftime('%Y-%m-%d')}
+"""
 
-Milestone: {milestone.description}
-Milestone Due Date: {milestone.due_date.strftime('%Y-%m-%d')}
+        # Add PDF context if available
+        if pdf_context:
+            prompt += f"""
+{pdf_context}
+"""
 
-Available days for scheduling tasks: {days_str}
-Total available days: {len(available_days)}
+        prompt += f"""
+MILESTONE TO COMPLETE:
+- Description: "{milestone.description}"
+- Due Date: {milestone.due_date.strftime('%Y-%m-%d')}
 
-Please decompose this milestone into specific, actionable daily tasks. Each task should:
-- Be completable in 2-4 hours
-- Be specific and actionable (not vague like "work on paper")
-- Be scheduled on one of the available days
-- Build logically on previous tasks
+AVAILABLE DAYS: {days_str}
+TOTAL DAYS AVAILABLE: {len(available_days)}
 
-Return your response as a JSON array with objects containing:
+Create 2-4 daily tasks that represent PROGRESS CHECKPOINTS toward completing the "{milestone.description}" milestone.
+
+IMPORTANT GUIDELINES:
+1. Each task MUST include the milestone name in the format: "[X% of '{milestone.description}']"
+2. Tasks should be evenly distributed to reach 100% by the due date
+3. After the percentage, provide CONCRETE and SPECIFIC suggestions:
+   - What exactly should be done at this checkpoint
+   - What deliverables or outputs are expected
+   - How to verify this progress has been achieved
+"""
+
+        if pdf_context:
+            prompt += """4. Since a PDF is provided, reference the paper's current state:
+   - Mention specific sections, figures, or tables that need work
+   - Reference actual content from the paper when relevant
+"""
+        else:
+            prompt += """4. Give actionable, specific tasks even without PDF context
+"""
+
+        prompt += f"""
+Return ONLY a JSON array with objects containing:
 - "scheduled_date": date in YYYY-MM-DD format
-- "description": specific task description
+- "description": task with format "[X% of '{milestone.description}'] Concrete action..."
 - "estimated_hours": estimated hours (2-4)
 
-Example format:
+Example for milestone "rerun experiments":
 [
-  {{"scheduled_date": "2025-02-01", "description": "Draft introduction section outline with 3 main points", "estimated_hours": 2}},
-  {{"scheduled_date": "2025-02-02", "description": "Write first draft of related work section", "estimated_hours": 3}}
+  {{"scheduled_date": "2025-02-01", "description": "[25% of 'rerun experiments'] Set up experiment environment and verify all dependencies. Checkpoint: environment runs without errors", "estimated_hours": 2}},
+  {{"scheduled_date": "2025-02-02", "description": "[50% of 'rerun experiments'] Execute baseline experiments and log all outputs. Checkpoint: baseline results match expected ranges", "estimated_hours": 3}},
+  {{"scheduled_date": "2025-02-03", "description": "[75% of 'rerun experiments'] Run full experiment suite and collect metrics. Checkpoint: all experiments complete with recorded metrics", "estimated_hours": 3}},
+  {{"scheduled_date": "2025-02-04", "description": "[100% of 'rerun experiments'] Compare results with paper claims and document any discrepancies. Checkpoint: results summary ready for paper update", "estimated_hours": 2}}
 ]
 
 Return ONLY the JSON array, no other text."""
+
+        return prompt
 
     def _parse_response(
         self,
@@ -199,16 +297,32 @@ Return ONLY the JSON array, no other text."""
 
         # Calculate available days
         today = date.today()
-        start_date = today if today < milestone.due_date else milestone.due_date - timedelta(days=7)
+        # Use milestone's start_date if set, otherwise use today
+        if milestone.start_date and milestone.start_date >= today:
+            start_date = milestone.start_date
+        elif milestone.start_date and milestone.start_date < today:
+            # If start_date is in the past, use today
+            start_date = today
+        else:
+            start_date = today if today < milestone.due_date else milestone.due_date - timedelta(days=7)
         available_days = self._get_available_days(start_date, milestone.due_date)
 
         if not available_days:
             raise ValueError('No available days for scheduling tasks')
 
-        # Build prompt and call LLM
-        prompt = self._build_prompt(paper, milestone, available_days)
-        response_text = self._call_llm(prompt)
-        tasks = self._parse_response(response_text, milestone, paper)
+        # Check if PDF is available for detailed decomposition
+        pdf_context = None
+        if paper.pdf_path:
+            pdf_context = self._get_pdf_context(paper)
+
+        if pdf_context:
+            # Full LLM-based decomposition with PDF context
+            prompt = self._build_prompt(paper, milestone, available_days, pdf_context)
+            response_text = self._call_llm(prompt)
+            tasks = self._parse_response(response_text, milestone, paper)
+        else:
+            # Simple percentage-based decomposition without PDF
+            tasks = self._create_simple_tasks(milestone, paper, available_days)
 
         if not dry_run:
             # Delete existing tasks if force re-decomposing

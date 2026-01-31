@@ -35,7 +35,6 @@ def create_papers_table(title: str = 'Papers') -> Table:
     table = Table(title=title, show_header=True, header_style='bold')
     table.add_column('Name', style='cyan')
     table.add_column('Deadline', style='yellow')
-    table.add_column('Conference', style='green')
     table.add_column('Days Left', justify='right')
     return table
 
@@ -54,10 +53,9 @@ def create_milestones_table(title: str = 'Milestones') -> Table:
 def create_tasks_table(title: str = 'Tasks') -> Table:
     """Create a table for displaying tasks."""
     table = Table(title=title, show_header=True, header_style='bold')
-    table.add_column('Paper', style='magenta')
-    table.add_column('Task', style='cyan')
-    table.add_column('Est. Hours', justify='right', style='yellow')
-    table.add_column('Status', style='green')
+    table.add_column('Paper', style='bold', width=16, no_wrap=True)
+    table.add_column('Checkpoint')
+    table.add_column('Detailed Task')
     return table
 
 
@@ -70,3 +68,37 @@ def status_style(status: str) -> str:
         'skipped': 'dim',
     }
     return styles.get(status, 'white')
+
+
+# Color palette for papers (cycles through these)
+PAPER_COLORS = ['cyan', 'magenta', 'green', 'yellow', 'blue', 'red']
+
+
+def get_paper_color(paper_name: str, paper_colors: dict) -> str:
+    """Get a consistent color for a paper name."""
+    if paper_name not in paper_colors:
+        color_idx = len(paper_colors) % len(PAPER_COLORS)
+        paper_colors[paper_name] = PAPER_COLORS[color_idx]
+    return paper_colors[paper_name]
+
+
+def create_progress_bar(percentage: int, width: int = 20) -> str:
+    """Create a text-based progress bar."""
+    filled = int(width * percentage / 100)
+    empty = width - filled
+    bar = '█' * filled + '░' * empty
+    return f'[green]{bar}[/green] {percentage}%'
+
+
+def create_day_table(date_str: str, task_count: int) -> Table:
+    """Create a table for a single day's tasks."""
+    table = Table(
+        title=f'[bold]{date_str}[/bold] [dim]({task_count} task{"s" if task_count != 1 else ""})[/dim]',
+        title_justify='left',
+        show_header=True,
+        header_style='bold',
+    )
+    table.add_column('Paper', style='bold', width=16, no_wrap=True)
+    table.add_column('Checkpoint')
+    table.add_column('Detailed Task')
+    return table

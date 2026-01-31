@@ -44,7 +44,6 @@ def sample_paper() -> Paper:
         id=uuid4(),
         name='Test Paper',
         deadline=date.today() + timedelta(days=30),
-        conference='NeurIPS',
         description='A test paper for unit testing',
     )
 

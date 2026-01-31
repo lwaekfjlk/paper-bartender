@@ -42,7 +42,6 @@ def list_papers(
         table.add_row(
             paper.name,
             format_date(paper.deadline),
-            paper.conference or '-',
             days_str,
         )
 

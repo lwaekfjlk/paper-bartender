@@ -23,10 +23,8 @@ class TestPaperService:
         paper = service.create(
             name='Test Paper',
             deadline=date.today() + timedelta(days=30),
-            conference='ICML',
         )
         assert paper.name == 'Test Paper'
-        assert paper.conference == 'ICML'
 
     def test_create_duplicate_paper(self, test_store: JsonStore) -> None:
         """Test creating a paper with duplicate name fails."""

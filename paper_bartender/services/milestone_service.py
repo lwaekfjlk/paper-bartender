@@ -20,6 +20,7 @@ class MilestoneService:
         paper_id: UUID,
         description: str,
         due_date: date,
+        start_date: Optional[date] = None,
         priority: int = 1,
     ) -> Milestone:
         """Create a new milestone."""
@@ -33,6 +34,7 @@ class MilestoneService:
         milestone = Milestone(
             paper_id=paper_id,
             description=description,
+            start_date=start_date,
             due_date=due_date,
             priority=priority,
         )
