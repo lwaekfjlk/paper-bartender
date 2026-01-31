@@ -13,8 +13,8 @@ class Paper(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     name: str
     deadline: date
-    conference: Optional[str] = None
     description: Optional[str] = None
+    pdf_path: Optional[str] = None
     archived: bool = False
 
     model_config = {'frozen': False}

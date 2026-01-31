@@ -62,3 +62,13 @@ class JsonStore:
 
         shutil.copy2(backup_path, data_path)
         return True
+
+    def clear(self) -> Optional[Path]:
+        """Clear all data, creating a backup first.
+
+        Returns:
+            Path to the backup file, or None if no data existed.
+        """
+        backup_path = self.backup()
+        self.save(StorageData())
+        return backup_path

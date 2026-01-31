@@ -8,15 +8,14 @@ A CLI tool to help researchers manage paper deadlines by decomposing milestones 
 
 ## Features
 
-- Track multiple papers with deadlines and conference information
-- Create milestones for each paper
-- Automatically decompose milestones into actionable daily tasks using Claude or GPT-4
+- **Natural language interface** - Just tell it what you want in plain English
+- Track multiple papers with deadlines
+- Link papers to PDF files for context-aware task generation
+- Create sequential milestones with automatic task decomposition
+- AI reads your paper's PDF to generate tasks tailored to your current progress
 - View today's tasks at a glance
-- Track overdue and pending tasks
 
 ## Installation
-
-### Install from PyPI (Recommended)
 
 ```bash
 # Using pip
@@ -26,29 +25,9 @@ pip install paper-bartender
 pipx install paper-bartender
 ```
 
-### Install from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/lwaekfjlk/paper-bartender.git
-cd paper-bartender
-
-# Install with pip
-pip install .
-
-# Or install with poetry (for development)
-poetry install
-```
-
-### Verify Installation
-
-```bash
-paper-bartender --help
-```
-
 ## Configuration
 
-Set your API key as an environment variable:
+Set your API key:
 
 ```bash
 # For Anthropic Claude (recommended)
@@ -58,150 +37,210 @@ export PAPER_BARTENDER_ANTHROPIC_API_KEY="your-anthropic-key"
 export PAPER_BARTENDER_OPENAI_API_KEY="your-openai-key"
 ```
 
-Optional configuration:
-
-```bash
-# Explicitly choose provider (auto-detects by default)
-export PAPER_BARTENDER_LLM_PROVIDER="anthropic"  # or "openai"
-
-# Change models
-export PAPER_BARTENDER_CLAUDE_MODEL="claude-sonnet-4-20250514"
-export PAPER_BARTENDER_OPENAI_MODEL="gpt-4o"
-
-# Change data directory (default: ~/.paper-bartender)
-export PAPER_BARTENDER_DATA_DIR="/path/to/data"
-```
-
 ## Usage
 
-### Show Today's Tasks
+### The `do` Command - Natural Language Interface
+
+The easiest way to use Paper Bartender is with natural language:
 
 ```bash
-# Show today's tasks (default command)
+# Add a paper with deadline
+paper-bartender do "add paper ABC deadline Feb 20"
+
+# Add a paper with PDF for smarter task generation
+paper-bartender do "add paper ABC deadline Feb 20 pdf ~/papers/draft.pdf"
+
+# Link a PDF to an existing paper
+paper-bartender do "add pdf ~/Downloads/draft.pdf to ABC"
+
+# Add a single milestone
+paper-bartender do "milestone for ABC: finish experiments by Feb 10"
+
+# Add multiple milestones at once (they become sequential!)
+paper-bartender do "for ABC paper: fix pipeline bug by 2/4, rerun experiments by 2/10, rewrite results by 2/15"
+```
+
+When you add multiple milestones, they are automatically sequenced:
+- **fix pipeline bug**: Today → 2/4
+- **rerun experiments**: 2/4 → 2/10
+- **rewrite results**: 2/10 → 2/15
+
+### View Your Tasks
+
+```bash
+# Show today's tasks (default)
 paper-bartender
 
-# Show all pending tasks
-paper-bartender today --all
+# Show all upcoming progress
+paper-bartender all
 
-# Filter by paper
-paper-bartender today --paper "My Paper"
+# Show timeline for a specific paper
+paper-bartender timeline "ABC"
+
+# Or filter any view by paper
+paper-bartender today --paper "ABC"
+paper-bartender all --paper "ABC"
 ```
 
-### Add a Paper
+### Mark Tasks Complete
 
 ```bash
-paper-bartender add paper "My Research Paper" --deadline 2025-05-15 --conference NeurIPS
-```
+# Mark a task as done (partial match)
+paper-bartender done "fix pipeline"
 
-Date formats supported:
-- ISO format: `2025-05-15`
-- Short format: `5/15`
-- Relative: `in 2 weeks`, `in 10 days`, `tomorrow`
-
-### Add a Milestone
-
-```bash
-paper-bartender add milestone "My Research Paper" "Write introduction" --due 5/10
-
-# With priority (1-5, higher = more important)
-paper-bartender add milestone "My Research Paper" "Run experiments" --due 5/5 --priority 3
-```
-
-### List Papers and Milestones
-
-```bash
-# List all papers
-paper-bartender list papers
-
-# Include archived papers
-paper-bartender list papers --archived
-
-# List milestones for a paper
-paper-bartender list milestones "My Research Paper"
-
-# Include completed milestones
-paper-bartender list milestones "My Research Paper" --completed
-```
-
-### Decompose Milestones into Tasks
-
-```bash
-# Generate daily tasks for all pending milestones
-paper-bartender decompose "My Research Paper"
-
-# Preview without saving (dry run)
-paper-bartender decompose "My Research Paper" --dry-run
-
-# Re-decompose already decomposed milestones
-paper-bartender decompose "My Research Paper" --force
+# Skip a task
+paper-bartender skip "review literature"
 ```
 
 ## Example Workflow
 
 ```bash
-# 1. Add a paper with deadline
-paper-bartender add paper "Awesome ML Paper" --deadline 2025-06-01 --conference ICML
+# 1. Add a paper with your PDF draft
+paper-bartender do "add paper ICML Submission deadline Feb 20 pdf ~/papers/icml-draft.pdf"
 
-# 2. Add milestones
-paper-bartender add milestone "Awesome ML Paper" "Complete literature review" --due 5/10
-paper-bartender add milestone "Awesome ML Paper" "Finish experiments" --due 5/20
-paper-bartender add milestone "Awesome ML Paper" "Write first draft" --due 5/28
+# 2. Add all your milestones in one command
+paper-bartender do "for ICML Submission: fix training bug by 2/4, run all experiments by 2/10, rewrite results section by 2/15, final polish by 2/19"
 
-# 3. Generate daily tasks
-paper-bartender decompose "Awesome ML Paper"
-
-# 4. Check today's tasks every day
+# 3. Check your tasks daily
 paper-bartender
+
+# 4. Mark tasks as done
+paper-bartender done "identify bug"
+
+# 5. See the full schedule
+paper-bartender all
 ```
 
-## Data Storage
+**Today's tasks with progress bars:**
 
-All data is stored locally in JSON format at `~/.paper-bartender/data.json`. Backups are automatically created before destructive operations.
+```
+📋 Today's Tasks (Sat, Jan 31)
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Paper            ┃ Checkpoint                                    ┃ Detailed Task                   ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ICML Submission  │ ███░░░░░░░░░  25% fix training bug            │ Review pipeline code and...     │
+│ Other Paper      │ ██████░░░░░░  50% finish experiments          │ N/A                             │
+└──────────────────┴───────────────────────────────────────────────┴─────────────────────────────────┘
+```
+
+**Timeline for a specific paper:**
+
+```
+$ paper-bartender timeline "ICML Submission"
+
+📅 Upcoming Progress  (8 tasks across 5 days)
+
+Today (1 task)
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Paper            ┃ Checkpoint                                    ┃ Detailed Task                   ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ICML Submission  │ ███░░░░░░░░░  25% fix training bug            │ Review pipeline code...         │
+└──────────────────┴───────────────────────────────────────────────┴─────────────────────────────────┘
+
+Tomorrow (1 task)
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Paper            ┃ Checkpoint                                    ┃ Detailed Task                   ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ICML Submission  │ ██████░░░░░░  50% fix training bug            │ Implement fixes...              │
+└──────────────────┴───────────────────────────────────────────────┴─────────────────────────────────┘
+```
+
+---
+
+## Advanced Commands
+
+<details>
+<summary><b>Add Paper (explicit command)</b></summary>
+
+```bash
+paper-bartender add paper "My Paper" --deadline 2025-05-15 --pdf ~/draft.pdf
+```
+
+Date formats: `2025-05-15`, `5/15`, `in 2 weeks`, `tomorrow`
+</details>
+
+<details>
+<summary><b>Add Milestone (explicit command)</b></summary>
+
+```bash
+paper-bartender add milestone "My Paper" "Write intro" --due 5/10
+
+# With priority (1-5)
+paper-bartender add milestone "My Paper" "Experiments" --due 5/5 --priority 3
+
+# Skip auto task generation
+paper-bartender add milestone "My Paper" "Review" --due 5/8 --no-decompose
+```
+</details>
+
+<details>
+<summary><b>List Papers & Milestones</b></summary>
+
+```bash
+paper-bartender list papers
+paper-bartender list papers --archived
+paper-bartender list milestones "My Paper"
+paper-bartender list milestones "My Paper" --completed
+```
+</details>
+
+<details>
+<summary><b>Re-generate Tasks</b></summary>
+
+```bash
+# Re-generate tasks (re-reads PDF for updated context)
+paper-bartender decompose "My Paper" --force
+
+# Preview without saving
+paper-bartender decompose "My Paper" --dry-run
+```
+</details>
+
+<details>
+<summary><b>Delete Data</b></summary>
+
+```bash
+paper-bartender delete paper "My Paper"
+paper-bartender delete milestone "My Paper" "Write intro"
+
+# Clear everything (creates backup first)
+paper-bartender clear
+
+# Restore from backup
+paper-bartender restore
+```
+</details>
 
 ## Commands Reference
 
 | Command | Description |
 |---------|-------------|
 | `paper-bartender` | Show today's tasks |
-| `paper-bartender today [--all] [--paper NAME]` | Show today's or all pending tasks |
-| `paper-bartender add paper NAME --deadline DATE [--conference NAME]` | Add a new paper |
-| `paper-bartender add milestone PAPER DESC --due DATE [--priority N]` | Add a milestone |
-| `paper-bartender list papers [--archived]` | List all papers |
-| `paper-bartender list milestones PAPER [--completed]` | List milestones for a paper |
-| `paper-bartender decompose PAPER [--force] [--dry-run]` | Generate tasks from milestones |
+| `paper-bartender all` | Show all upcoming tasks |
+| `paper-bartender timeline "Paper"` | Show timeline for a specific paper |
+| `paper-bartender do "..."` | **Natural language command** |
+| `paper-bartender done "task"` | Mark task complete |
+| `paper-bartender skip "task"` | Skip a task |
+| `paper-bartender add paper ...` | Add paper (explicit) |
+| `paper-bartender add milestone ...` | Add milestone (explicit) |
+| `paper-bartender list papers` | List papers |
+| `paper-bartender list milestones` | List milestones |
+| `paper-bartender decompose` | Re-generate tasks |
+| `paper-bartender delete` | Delete paper/milestone |
+| `paper-bartender clear` | Clear all data |
+| `paper-bartender restore` | Restore from backup |
+
+## Data Storage
+
+All data is stored locally at `~/.paper-bartender/data.json`. Backups are created automatically before destructive operations.
 
 ## Development
 
 ```bash
-# Install dev dependencies
 poetry install
-
-# Run tests
 pytest
-
-# Type checking
 mypy --strict paper_bartender
-
-# Format code
-ruff format .
-ruff check --fix .
-```
-
-## Publishing to PyPI
-
-To publish a new version:
-
-```bash
-# Update version in pyproject.toml and paper_bartender/__init__.py
-
-# Build the package
-poetry build
-
-# Publish to PyPI (requires PyPI credentials)
-poetry publish
-
-# Or publish to TestPyPI first
-poetry publish -r testpypi
+ruff format . && ruff check --fix .
 ```
 
 ## License

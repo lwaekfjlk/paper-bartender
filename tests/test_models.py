@@ -19,10 +19,8 @@ class TestPaper:
         paper = Paper(
             name='My Research Paper',
             deadline=date.today() + timedelta(days=30),
-            conference='NeurIPS',
         )
         assert paper.name == 'My Research Paper'
-        assert paper.conference == 'NeurIPS'
         assert paper.archived is False
         assert isinstance(paper.id, UUID)
 
@@ -32,7 +30,6 @@ class TestPaper:
             name='Test',
             deadline=date.today(),
         )
-        assert paper.conference is None
         assert paper.description is None
         assert paper.archived is False
 

@@ -20,8 +20,8 @@ class PaperService:
         self,
         name: str,
         deadline: date,
-        conference: Optional[str] = None,
         description: Optional[str] = None,
+        pdf_path: Optional[str] = None,
     ) -> Paper:
         """Create a new paper."""
         data = self._store.load()
@@ -34,8 +34,8 @@ class PaperService:
         paper = Paper(
             name=name,
             deadline=deadline,
-            conference=conference,
             description=description,
+            pdf_path=pdf_path,
         )
         data.papers.append(paper)
         self._store.save(data)
